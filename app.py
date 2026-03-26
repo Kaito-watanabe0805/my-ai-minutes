@@ -17,7 +17,6 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 # --- 保存用の関数 ---
 def save_to_drive_via_gas(content, file_name, mime_type):
-    # バイナリデータをテキスト（base64）に変換して送信
     b64_data = base64.b64encode(content).decode('utf-8')
     payload = {
         "folderId": FOLDER_ID,
@@ -25,8 +24,21 @@ def save_to_drive_via_gas(content, file_name, mime_type):
         "mimeType": mime_type,
         "base64": b64_data
     }
+    
     response = requests.post(GAS_URL, json=payload)
-    return response.json().get("id")
+    
+    # --- ここからデバッグ用追加 ---
+    if response.status_code != 200:
+        st.error(f"GASへの接続に失敗しました。ステータスコード: {response.status_code}")
+        st.write("Googleからの返答内容:", response.text)
+        return None
+    
+    try:
+        return response.json().get("id")
+    except Exception as e:
+        st.error("GASからの返答がJSON形式ではありません。URLや公開設定を確認してください。")
+        st.write("返答内容（生データ）:", response.text)
+        return None
 
 # --- メイン画面 ---
 st.write("録音終了後、Googleドライブへ自動保存し、AIが解析します。")
