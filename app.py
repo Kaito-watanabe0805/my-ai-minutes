@@ -7,9 +7,8 @@ from streamlit_mic_recorder import mic_recorder
 
 # --- 1. 基本設定 ---
 st.set_page_config(page_title="AI議事録プロ+", layout="wide")
-st.title("🎙️ AI議事録プロ+ (過去ログ機能付)")
+st.title("🎙️ AI議事録プロ+ (自動命名機能付)")
 
-# セッション状態の初期化
 if "current_minutes" not in st.session_state:
     st.session_state.current_minutes = None
 
@@ -50,41 +49,48 @@ else:
     st.sidebar.write("過去の議事録はありません")
 
 # --- 4. メインエリア（録音） ---
-col1, col2 = st.columns([1, 1])
-with col1:
-    audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 終了・解析", key='recorder')
+st.write("録音終了後、AIが内容を判断して最適なファイル名を付け、自動保存します。")
+audio = mic_recorder(start_prompt="⏺️ 録音開始", stop_prompt="⏹️ 終了・自動解析", key='recorder')
 
 if audio:
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    with st.spinner("AI解析中..."):
-        # 音声を保存（バックグラウンド）
-        save_to_drive(audio['bytes'], f"audio_{timestamp}.mp3", "audio/mpeg")
-        # AI解析
+    with st.spinner("AIが内容を読み取ってタイトルを考えています..."):
         model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        # A. 議事録の生成
         response = model.generate_content([
-            "話者1、話者2のように分離して詳細に文字起こしし、最後に要約を書いてください。",
+            "10名程度の話者を分離して詳細に文字起こしし、最後に要約とネクストアクションを書いてください。",
             {"mime_type": "audio/mpeg", "data": audio['bytes']}
         ])
-        st.session_state.current_minutes = response.text
-        # テキスト保存
-        save_to_drive(response.text.encode('utf-8'), f"minutes_{timestamp}.txt", "text/plain")
+        minutes_text = response.text
+        st.session_state.current_minutes = minutes_text
+
+        # B. 自動タイトルの生成（ここが新機能！）
+        title_response = model.generate_content(f"以下の議事録の内容から、ファイル名にふさわしい簡潔なタイトル（15文字以内）を考えて、タイトルのみを出力してください。余計な説明や記号、拡張子は不要です。\n内容：{minutes_text}")
+        # 変な記号が含まれないように掃除し、日付を添える
+        clean_title = title_response.text.strip().replace("/", "-").replace(" ", "_")
+        timestamp = datetime.datetime.now().strftime("%y%m%d")
+        final_filename = f"{timestamp}_{clean_title}"
+
+        # C. ドライブへ保存（決まったタイトルを使用）
+        save_to_drive(audio['bytes'], f"{final_filename}.mp3", "audio/mpeg")
+        save_to_drive(minutes_text.encode('utf-8'), f"{final_filename}.txt", "text/plain")
+        
+        st.success(f"✅ 「{final_filename}」として保存しました！")
 
 # --- 5. 表示とチャット機能 ---
 if st.session_state.current_minutes:
+    st.markdown("---")
     st.markdown("### 📝 表示中の議事録")
-    st.info("右上のサイドバーから過去のデータも呼び出せます。")
     st.text_area("", st.session_state.current_minutes, height=400)
 
     st.markdown("### 💬 AIへの指示・質問")
-    st.caption("「表形式にして」「敬語を直して」「決定事項を抜き出して」など自由に指示できます。")
-    user_input = st.text_input("ここに指示を入力...")
+    user_input = st.text_input("ここに指示を入力（例：この内容を箇条書きの表にして）")
     
     if user_input:
         with st.spinner("思考中..."):
             model = genai.GenerativeModel("gemini-1.5-flash")
             chat_res = model.generate_content(f"以下の内容について指示に応えてください。\n内容：{st.session_state.current_minutes}\n指示：{user_input}")
-            st.success("AIの回答：")
-            st.write(chat_res.text)
+            st.info(chat_res.text)
 
 st.divider()
-st.caption("AI Minutes Assistant v2.0")
+st.caption("AI Minutes Assistant v2.1 (Auto-Naming Edition)")
