@@ -15,7 +15,7 @@ GAS_URL = st.secrets["GAS_URL"]
 
 # Geminiの初期化（モデル名をより正確な形式に修正）
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 def save_to_drive_via_gas(content, file_name, mime_type):
     b64_data = base64.b64encode(content).decode('utf-8')
