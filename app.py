@@ -23,14 +23,37 @@ except Exception as e:
     st.error("Secretsの設定を確認してください。")
     st.stop()
 
-# --- 2. 使えるAIモデルを自動で探す ---
+# --- 2. 使えるAIモデルを自動で探す（強化版） ---
 def get_working_model():
-    available_models = [m.name.replace('models/', '') for m in genai.list_models() 
-                        if 'generateContent' in m.supported_generation_methods]
-    for cand in ['gemini-3-flash', 'gemini-1.5-flash', 'gemini-pro']:
-        if cand in available_models:
-            return genai.GenerativeModel(cand)
-    return None
+    try:
+        # 現在のAPIキーで使える全モデルを取得
+        available_models = [m.name for m in genai.list_models()]
+        
+        # 2026年の最新モデル名候補（優先順位順）
+        # 'models/' が付いている場合と付いていない場合の両方をチェックします
+        candidates = [
+            'models/gemini-3-flash', 'gemini-3-flash',
+            'models/gemini-1.5-flash', 'gemini-1.5-flash',
+            'models/gemini-pro', 'gemini-pro'
+        ]
+        
+        # 1. 候補の中から最初に見つかったものを使う
+        for cand in candidates:
+            if cand in available_models:
+                st.write(f"🔍 使用モデル: {cand}") # デバッグ用：どのモデルを使っているか表示
+                return genai.GenerativeModel(cand)
+        
+        # 2. 候補になくても、'generateContent'ができるモデルがあればそれを使う
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                st.write(f"🔍 代替モデルを使用: {m.name}")
+                return genai.GenerativeModel(m.name)
+                
+        return None
+    except Exception as e:
+        st.error(f"モデルリストの取得に失敗しました: {e}")
+        # 万が一リスト取得自体が失敗した場合の最終手段（ハードコード）
+        return genai.GenerativeModel('gemini-1.5-flash')
 
 # --- 3. Googleドライブ保存関数 ---
 def save_to_drive_via_gas(content, file_name, mime_type):
